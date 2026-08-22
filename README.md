@@ -37,10 +37,10 @@ A gateway you put in front of any set of OpenAI-compatible endpoints.
 
 ## Status
 
-Early. The prefix tree is built and tested; the router is not written yet.
+The routing core is built and tested. Nothing has been measured yet — no gateway, no traffic.
 
 - [x] Radix tree over tokens with per-replica residency, block-aligned matching, LRU eviction
-- [ ] Cost-model router and the baselines to beat (round-robin, least-connections, consistent hash, pure affinity)
+- [x] Cost-model router and the baselines to beat (round-robin, least-connections, consistent hash, pure affinity)
 - [ ] Gateway speaking the OpenAI chat completions API
 - [ ] Cache-state drift: what happens when a replica evicts something the router still believes it has
 - [ ] Evaluation under production arrival traces, not synthetic uniform load
