@@ -45,6 +45,9 @@ Early. The prefix tree is built and tested; the router is not written yet.
 - [ ] Cache-state drift: what happens when a replica evicts something the router still believes it has
 - [ ] Evaluation under production arrival traces, not synthetic uniform load
 
+New to prefill, decode, and KV cache mechanics? [CONCEPTS.md](CONCEPTS.md) explains what the
+router is exploiting and where the numbers come from.
+
 ## Design notes
 
 Three rules in `radix.py` are easy to get wrong, and each has a test pinning it down:
