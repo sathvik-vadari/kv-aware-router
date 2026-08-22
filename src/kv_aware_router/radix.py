@@ -17,11 +17,17 @@ Residency is inherited upward.
     whole root-to-node path, and the longest match for a replica is the deepest
     node on the query path where it is resident.
 
-Matches round down to a block boundary.
-    Engines cache in fixed-size blocks (vLLM defaults to 16 tokens). A replica
-    holding 100 tokens can only serve 96 of them as a hit; the remainder has to
-    be re-prefilled. Reporting the unrounded number is the single easiest way to
-    overstate how well a routing policy is doing.
+Matches round down to the match unit, which is NOT the physical block size.
+    A replica holding 100 tokens can only serve 96 of them at a 16-token unit;
+    the remainder has to be re-prefilled. Reporting the unrounded number is the
+    single easiest way to overstate how well a routing policy is doing.
+
+    The rounding granularity is the engine's *prefix match unit*, not how it
+    physically stores blocks. vLLM separates these: `prefix_match_unit` is how
+    often prefix-cache keys are computed, and it may be far finer than the
+    physical `block_size` (their docs give 32 against a 1024-token hybrid-model
+    block). Modelling this with the physical block size makes the router believe
+    there is no reuse available when there is plenty.
 
 Eviction is tail-first.
     A prefix block cannot be freed while a longer prefix that extends it is still
@@ -40,7 +46,23 @@ from dataclasses import dataclass, field
 
 Tokens = tuple[int, ...]
 
-DEFAULT_BLOCK_SIZE = 16
+# Attention kernels consume the KV sequence dimension in fixed tiles -- for
+# fp16 Tensor Cores the MMA shape is m16n8k16, so the sequence axis lands on a
+# 16-wide K dimension. A match unit that is not a multiple of 16 leaves a
+# partial tile at every boundary, which the kernel would have to mask off on
+# every block, head, layer and step. vLLM's FlashAttention backend states the
+# constraint directly as MultipleOf(16).
+KERNEL_TILE_TOKENS = 16
+
+DEFAULT_MATCH_UNIT = 16
+
+# Some backends cap the unit as well, and the cap depends on the GPU. FlashInfer
+# only goes above 64 on Blackwell with the trtllm-gen decode kernel and GQA.
+BACKEND_MAX_MATCH_UNIT: dict[str, int] = {
+    "flash_attn": 0,        # 0 == no ceiling beyond the multiple-of-16 rule
+    "flashinfer": 64,
+    "triton": 0,
+}
 
 
 @dataclass(slots=True)
@@ -63,10 +85,10 @@ class PrefixTree:
 
     def __init__(
         self,
-        block_size: int = DEFAULT_BLOCK_SIZE,
+        prefix_match_unit: int = DEFAULT_MATCH_UNIT,
         capacity_tokens: dict[str, int] | None = None,
     ) -> None:
-        self.block_size = block_size
+        self.prefix_match_unit = prefix_match_unit
         self.root = Node(edge=(), depth=0)
         self.capacity_tokens = dict(capacity_tokens or {})
         self.tokens_used: dict[str, int] = {}
@@ -123,7 +145,7 @@ class PrefixTree:
         i = 0
         while True:
             for replica, _ in node.residents.items():
-                usable = (node.depth // self.block_size) * self.block_size
+                usable = (node.depth // self.prefix_match_unit) * self.prefix_match_unit
                 if usable > best.get(replica, 0):
                     best[replica] = usable
             if i >= len(tokens):
@@ -142,7 +164,7 @@ class PrefixTree:
                 # query actually shares. Missing this silently reports no hit for
                 # any query shorter than a cached prefix.
                 for replica in child.residents:
-                    usable = ((i + j) // self.block_size) * self.block_size
+                    usable = ((i + j) // self.prefix_match_unit) * self.prefix_match_unit
                     if usable > best.get(replica, 0):
                         best[replica] = usable
                 break

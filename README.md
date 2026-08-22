@@ -49,9 +49,14 @@ Early. The prefix tree is built and tested; the router is not written yet.
 
 Three rules in `radix.py` are easy to get wrong, and each has a test pinning it down:
 
-**Matches round down to a block boundary.** Engines cache in fixed-size blocks — vLLM defaults to
-16 tokens. A replica holding 100 tokens can serve 96 of them; the trailing partial block is
-re-prefilled. Reporting the unrounded number is the easiest way to overstate a routing policy.
+**Matches round down to the match unit, which is not the physical block size.** A replica holding
+100 tokens can serve 96 at a 16-token unit; the trailing partial block is re-prefilled. Reporting
+the unrounded number is the easiest way to overstate a routing policy.
+
+The granularity that matters is the engine's *prefix match unit* — how often it computes
+prefix-cache keys — not how it physically stores blocks. vLLM separates the two, and the match unit
+can be far finer (their docs give 32 against a 1024-token hybrid-model block). Model this with the
+physical block size and the router concludes there is no reuse available when there is plenty.
 
 **Residency is inherited upward.** Holding a 900-token prefix means holding every shorter prefix of
 it, because they are physically the same blocks. Edge compression makes this subtle: a long prefix
