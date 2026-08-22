@@ -65,6 +65,34 @@ BACKEND_MAX_MATCH_UNIT: dict[str, int] = {
 }
 
 
+def validate_match_unit(unit: int, backend: str | None = None) -> None:
+    """Reject match units the target engine could not actually serve.
+
+    Worth enforcing rather than trusting: a router configured with an illegal
+    unit does not fail loudly, it just reports hit rates the backend can never
+    deliver, and the routing decisions quietly go wrong.
+    """
+    if unit <= 0:
+        raise ValueError(f"prefix match unit must be positive, got {unit}")
+    if unit % KERNEL_TILE_TOKENS:
+        raise ValueError(
+            f"prefix match unit must be a multiple of {KERNEL_TILE_TOKENS}, got {unit}. "
+            f"Attention consumes the KV sequence axis in {KERNEL_TILE_TOKENS}-wide "
+            f"Tensor Core tiles, so {unit} would leave a partial tile at every boundary."
+        )
+    if backend is None:
+        return
+    if backend not in BACKEND_MAX_MATCH_UNIT:
+        raise ValueError(
+            f"unknown backend {backend!r}; known: {sorted(BACKEND_MAX_MATCH_UNIT)}"
+        )
+    cap = BACKEND_MAX_MATCH_UNIT[backend]
+    if cap and unit > cap:
+        raise ValueError(
+            f"backend {backend!r} supports a match unit of at most {cap}, got {unit}"
+        )
+
+
 @dataclass(slots=True)
 class Node:
     """One edge-compressed segment of the prefix tree."""
@@ -87,7 +115,9 @@ class PrefixTree:
         self,
         prefix_match_unit: int = DEFAULT_MATCH_UNIT,
         capacity_tokens: dict[str, int] | None = None,
+        backend: str | None = None,
     ) -> None:
+        validate_match_unit(prefix_match_unit, backend)
         self.prefix_match_unit = prefix_match_unit
         self.root = Node(edge=(), depth=0)
         self.capacity_tokens = dict(capacity_tokens or {})
