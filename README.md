@@ -31,6 +31,45 @@ bolt on a threshold. The cost model turns that fight into an optimisation, and i
 correctly at both ends without tuning: under light load queue delay is near zero so it behaves as
 pure affinity, and under heavy load queue delay dominates so it becomes pure balance.
 
+## Results so far
+
+800 requests, 4 replicas, concurrency 8, **unbounded cache**. Regenerate with
+`uv run python experiments/01_policy_comparison.py`.
+
+| policy | prefix reuse | load CV |
+|---|---|---|
+| oracle ceiling | 80.5% | — |
+| `round_robin` | 65.8% | 0.000 |
+| `least_connections` | 65.8% | 0.000 |
+| `consistent_hash` | 79.8% | 0.158 |
+| `pure_affinity` | 80.5% | 0.579 |
+| **`cost_model`** | **72.4%** | **0.084** |
+
+Two findings, and the second one is inconvenient.
+
+**Most of the available reuse is the shared system prompt.** Cache-blind round-robin still captures
+65.8% of the 80.5% ceiling, because a 512-token system prompt gets cached on every replica almost
+immediately. The marginal value of cache-aware routing is the session-specific tail, not the
+headline number — so any claim of a large win depends entirely on the ratio of conversation history
+to shared prefix in the workload.
+
+**Session-keyed consistent hashing beats the cost model here, on both axes that matter.** 79.8% vs
+72.4% reuse, and 0.158 vs 0.084 CV is a balance edge that does not pay for seven points of reuse.
+Consistent hashing gets near-oracle reuse while holding no state at all.
+
+That result is honest and it is not what this project set out to show. The reason is that these
+conditions are consistent hashing's best case: perfect session locality, uniformly weighted
+sessions, and an unbounded cache that never evicts anything. The cost model can only earn its
+complexity where hashing structurally cannot see the problem:
+
+- **finite capacity** — once replicas evict, hashing keeps routing to a replica that no longer holds
+  the prefix, and has no way to find out
+- **load skew** — heavy and light sessions hash the same, so there is no rebalancing
+- **replica churn** — scaling the fleet reshuffles the ring and invalidates affinity wholesale
+
+None of those are simulated yet. Finite capacity is next, which makes cache-state drift the
+make-or-break question for the thesis rather than an interesting aside.
+
 ## Application
 
 A gateway you put in front of any set of OpenAI-compatible endpoints.

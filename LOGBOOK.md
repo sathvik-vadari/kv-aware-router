@@ -42,3 +42,32 @@ tokens of fresh prefill on an idle box. The demo was wrong, not the model. Compl
 made it pick the warm replica as expected.
 
 Next: the gateway, so this runs against real endpoints instead of asserted state.
+
+## 2026-08-26 — first measurements, and the thesis is losing
+
+Q: how much prefill does each policy actually avoid, and at what cost in balance?
+
+Built the workload generator (interleaved multi-turn sessions, shared system prompts), the replay
+harness, and the first experiment. 55 tests pass. Numbers are in `results/01_policy_comparison.json`.
+
+**Caught my own baseline cheating.** `consistent_hash` scored exactly the oracle ceiling, which was
+too good. It was hashing the first 64 tokens — but those are the *system prompt*, identical across
+unrelated sessions, so the ring collapsed into "shard by system prompt". Every session using prompt
+X pinned to one replica: maximum reuse, ruined balance, and not consistent hashing at all. Now it
+takes a session key like a real deployment would. Kept the broken variant as a control, because the
+failure is invisible if you only look at the aggregate.
+
+**The honest result: the cost model does not win.** Session-keyed consistent hashing gets 79.8%
+reuse to the cost model's 72.4%, and the cost model's balance edge (CV 0.084 vs 0.158) does not buy
+back seven points of reuse. Hashing achieves near-oracle reuse while holding no state whatsoever.
+
+Also: round-robin already captures 65.8% of the 80.5% ceiling. Most of the reuse on this workload is
+just the 512-token system prompt, which lands on every replica almost immediately. The interesting
+part of cache-aware routing is only the session-specific tail.
+
+Why hashing wins right now: unbounded cache, uniform sessions, perfect session locality. That is its
+best case, and I built exactly that. The cost model can only pay for itself where hashing is
+structurally blind — finite capacity and eviction, load skew, replica churn. None of it simulated.
+
+So finite capacity is next, and cache-state drift stops being a nice-to-have. It is where the thesis
+lives or dies.
