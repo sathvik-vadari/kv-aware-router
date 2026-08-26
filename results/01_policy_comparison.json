@@ -1,0 +1,85 @@
+{
+  "spec": "WorkloadSpec(n_sessions=200, turns_per_session=4, n_system_prompts=3, system_tokens=512, user_tokens=48, reply_tokens=160, session_arrival_rate=2.0, think_time_s=20.0, seed=0)",
+  "replicas": [
+    "a",
+    "b",
+    "c",
+    "d"
+  ],
+  "concurrency": 8,
+  "oracle_reuse_ceiling": 0.8051,
+  "results": [
+    {
+      "policy": "round_robin",
+      "reuse_fraction": 0.6583,
+      "load_cv": 0.0,
+      "prefill_tokens_executed": 238336,
+      "requests_per_replica": {
+        "a": 200,
+        "b": 200,
+        "c": 200,
+        "d": 200
+      }
+    },
+    {
+      "policy": "least_connections",
+      "reuse_fraction": 0.6583,
+      "load_cv": 0.0,
+      "prefill_tokens_executed": 238336,
+      "requests_per_replica": {
+        "a": 200,
+        "b": 200,
+        "c": 200,
+        "d": 200
+      }
+    },
+    {
+      "policy": "consistent_hash",
+      "reuse_fraction": 0.7985,
+      "load_cv": 0.1581,
+      "prefill_tokens_executed": 140544,
+      "requests_per_replica": {
+        "a": 208,
+        "b": 244,
+        "c": 192,
+        "d": 156
+      }
+    },
+    {
+      "policy": "pure_affinity",
+      "reuse_fraction": 0.8051,
+      "load_cv": 0.5788,
+      "prefill_tokens_executed": 135936,
+      "requests_per_replica": {
+        "a": 280,
+        "b": 260,
+        "c": 260,
+        "d": 0
+      }
+    },
+    {
+      "policy": "cost_model",
+      "reuse_fraction": 0.7244,
+      "load_cv": 0.0836,
+      "prefill_tokens_executed": 192240,
+      "requests_per_replica": {
+        "a": 176,
+        "b": 218,
+        "c": 213,
+        "d": 193
+      }
+    },
+    {
+      "policy": "consistent_hash_token_prefix",
+      "reuse_fraction": 0.8051,
+      "load_cv": 0.5788,
+      "prefill_tokens_executed": 135936,
+      "requests_per_replica": {
+        "a": 260,
+        "b": 280,
+        "c": 260,
+        "d": 0
+      }
+    }
+  ]
+}
