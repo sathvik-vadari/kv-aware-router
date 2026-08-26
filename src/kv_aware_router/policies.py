@@ -18,7 +18,9 @@ from .radix import Tokens
 class Policy(Protocol):
     name: str
 
-    def choose(self, fleet: Fleet, tokens: Tokens) -> str: ...
+    def choose(
+        self, fleet: Fleet, tokens: Tokens, session_key: str | None = None
+    ) -> str: ...
 
 
 def _tiebreak(fleet: Fleet, candidates: list[str]) -> str:
@@ -34,7 +36,9 @@ class RoundRobin:
     def __init__(self) -> None:
         self._n = 0
 
-    def choose(self, fleet: Fleet, tokens: Tokens) -> str:
+    def choose(
+        self, fleet: Fleet, tokens: Tokens, session_key: str | None = None
+    ) -> str:
         ids = fleet.replica_ids
         pick = ids[self._n % len(ids)]
         self._n += 1
@@ -46,7 +50,9 @@ class LeastConnections:
 
     name = "least_connections"
 
-    def choose(self, fleet: Fleet, tokens: Tokens) -> str:
+    def choose(
+        self, fleet: Fleet, tokens: Tokens, session_key: str | None = None
+    ) -> str:
         return _tiebreak(fleet, fleet.replica_ids)
 
 
@@ -54,14 +60,19 @@ class ConsistentHash:
     """Hash a session key onto a ring of replicas.
 
     The cheap way to get affinity: hash something stable about the conversation
-    and always send it to the same replica. Approximated here by hashing the
-    first `session_key_tokens` tokens, since a conversation's opening tokens
-    stay fixed as it grows.
+    and always send it to the same replica. Real deployments key on a session or
+    user id carried in the request, so that is what this takes.
 
     It gets affinity without ever looking at the cache, which is the weakness:
     it cannot tell that a replica evicted the prefix, cannot react to load at
     all, and sends two conversations sharing a long system prompt to different
     replicas whenever their hashes differ.
+
+    Falling back to hashing the token prefix is available but is NOT equivalent,
+    and measuring it that way overstates the baseline badly. With a shared system
+    prompt the leading tokens are identical across unrelated sessions, so the
+    hash collapses into "shard by system prompt" -- which reaches oracle reuse
+    and ruins load balance, and is a different policy wearing this one's name.
     """
 
     name = "consistent_hash"
@@ -86,12 +97,18 @@ class ConsistentHash:
         self._ring = ring
         self._built_for = tuple(ids)
 
-    def choose(self, fleet: Fleet, tokens: Tokens) -> str:
+    def choose(
+        self, fleet: Fleet, tokens: Tokens, session_key: str | None = None
+    ) -> str:
         ids = fleet.replica_ids
         if tuple(ids) != self._built_for:
             self._rebuild(ids)
-        key = tokens[: self.session_key_tokens]
-        h = self._hash(b",".join(str(t).encode() for t in key))
+        if session_key is not None:
+            h = self._hash(session_key.encode())
+        else:
+            h = self._hash(
+                b",".join(str(t).encode() for t in tokens[: self.session_key_tokens])
+            )
         for point, rid in self._ring:
             if point >= h:
                 return rid
@@ -103,7 +120,9 @@ class PureAffinity:
 
     name = "pure_affinity"
 
-    def choose(self, fleet: Fleet, tokens: Tokens) -> str:
+    def choose(
+        self, fleet: Fleet, tokens: Tokens, session_key: str | None = None
+    ) -> str:
         cached = fleet.cached_tokens(tokens)
         if not cached:
             return _tiebreak(fleet, fleet.replica_ids)
@@ -127,7 +146,9 @@ class CostModelPolicy:
     def __init__(self, cost: CostModel | None = None) -> None:
         self.cost = cost or CostModel()
 
-    def choose(self, fleet: Fleet, tokens: Tokens) -> str:
+    def choose(
+        self, fleet: Fleet, tokens: Tokens, session_key: str | None = None
+    ) -> str:
         scores = fleet.expected_ttft_s(tokens, self.cost)
         best = min(scores.values())
         return _tiebreak(fleet, [r for r, s in scores.items() if s == best])

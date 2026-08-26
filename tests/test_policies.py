@@ -88,3 +88,27 @@ def test_consistent_hash_spreads_distinct_conversations():
     policy = make_policy("consistent_hash")
     picks = {policy.choose(fleet, tuple(range(i, i + 200))) for i in range(0, 4000, 97)}
     assert len(picks) > 1          # not collapsing everything onto one replica
+
+
+def test_consistent_hash_keys_on_the_session_not_the_prompt():
+    fleet = Fleet(["a", "b", "c"])
+    policy = make_policy("consistent_hash")
+    # two unrelated sessions sharing a system prompt must be free to land on
+    # different replicas; keying on the token prefix would pin them together
+    shared_head = tuple(range(512))
+    picks = {
+        policy.choose(fleet, shared_head + (i,), session_key=f"s{i}")
+        for i in range(30)
+    }
+    assert len(picks) > 1
+
+
+def test_token_prefix_hashing_collapses_onto_the_system_prompt():
+    # documents why the session key is required rather than optional: with no
+    # key, sessions sharing a system prompt all hash to one replica, which is
+    # "shard by system prompt" wearing consistent hashing's name
+    fleet = Fleet(["a", "b", "c"])
+    policy = make_policy("consistent_hash")
+    shared_head = tuple(range(512))
+    picks = {policy.choose(fleet, shared_head + (i,)) for i in range(30)}
+    assert len(picks) == 1

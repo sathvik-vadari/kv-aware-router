@@ -85,7 +85,7 @@ def replay(
         while len(inflight) >= concurrency:
             fleet.complete(inflight.popleft(), now=req.arrival_s)
 
-        replica = policy.choose(fleet, req.tokens)
+        replica = policy.choose(fleet, req.tokens, session_key=str(req.session_id))
 
         # Measure the hit *before* dispatching: dispatch inserts the prefix, at
         # which point it would look cached whether or not it already was.
