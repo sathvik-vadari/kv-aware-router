@@ -1,0 +1,180 @@
+{
+  "replicas": [
+    "a",
+    "b",
+    "c",
+    "d"
+  ],
+  "concurrency": 8,
+  "capacity_sweep": [
+    {
+      "capacity_tokens": null,
+      "reuse": {
+        "round_robin": 0.6583,
+        "least_connections": 0.6583,
+        "consistent_hash": 0.7985,
+        "pure_affinity": 0.8051,
+        "cost_model": 0.7244
+      }
+    },
+    {
+      "capacity_tokens": 64000,
+      "reuse": {
+        "round_robin": 0.6583,
+        "least_connections": 0.6583,
+        "consistent_hash": 0.7985,
+        "pure_affinity": 0.8051,
+        "cost_model": 0.7244
+      }
+    },
+    {
+      "capacity_tokens": 32000,
+      "reuse": {
+        "round_robin": 0.6547,
+        "least_connections": 0.6547,
+        "consistent_hash": 0.7971,
+        "pure_affinity": 0.8025,
+        "cost_model": 0.7229
+      }
+    },
+    {
+      "capacity_tokens": 16000,
+      "reuse": {
+        "round_robin": 0.6395,
+        "least_connections": 0.6395,
+        "consistent_hash": 0.7736,
+        "pure_affinity": 0.7671,
+        "cost_model": 0.6955
+      }
+    },
+    {
+      "capacity_tokens": 8000,
+      "reuse": {
+        "round_robin": 0.6146,
+        "least_connections": 0.6146,
+        "consistent_hash": 0.7062,
+        "pure_affinity": 0.7051,
+        "cost_model": 0.6545
+      }
+    }
+  ],
+  "drift_sources": [
+    {
+      "source": "none (router models it exactly)",
+      "reuse": 0.6545,
+      "believed_reuse": 0.6545,
+      "drift": 0.0,
+      "misprediction_rate": 0.0
+    },
+    {
+      "source": "assumes 2x real capacity",
+      "reuse": 0.6505,
+      "believed_reuse": 0.6955,
+      "drift": 0.045,
+      "misprediction_rate": 0.1375
+    },
+    {
+      "source": "assumes 4x real capacity",
+      "reuse": 0.6633,
+      "believed_reuse": 0.7229,
+      "drift": 0.0596,
+      "misprediction_rate": 0.2137
+    },
+    {
+      "source": "second router sharing fleet",
+      "reuse": 0.6311,
+      "believed_reuse": 0.6545,
+      "drift": 0.0347,
+      "misprediction_rate": 0.1125
+    },
+    {
+      "source": "both",
+      "reuse": 0.6287,
+      "believed_reuse": 0.6955,
+      "drift": 0.077,
+      "misprediction_rate": 0.2362
+    }
+  ],
+  "ranking": [
+    {
+      "condition": "no drift",
+      "policy": "round_robin",
+      "reuse": 0.6146,
+      "drift": 0.0,
+      "misprediction_rate": 0.0,
+      "load_cv": 0.0
+    },
+    {
+      "condition": "no drift",
+      "policy": "least_connections",
+      "reuse": 0.6146,
+      "drift": 0.0,
+      "misprediction_rate": 0.0,
+      "load_cv": 0.0
+    },
+    {
+      "condition": "no drift",
+      "policy": "consistent_hash",
+      "reuse": 0.7062,
+      "drift": 0.0,
+      "misprediction_rate": 0.0,
+      "load_cv": 0.1581
+    },
+    {
+      "condition": "no drift",
+      "policy": "pure_affinity",
+      "reuse": 0.7051,
+      "drift": 0.0,
+      "misprediction_rate": 0.0,
+      "load_cv": 0.5788
+    },
+    {
+      "condition": "no drift",
+      "policy": "cost_model",
+      "reuse": 0.6545,
+      "drift": 0.0,
+      "misprediction_rate": 0.0,
+      "load_cv": 0.0651
+    },
+    {
+      "condition": "realistic drift",
+      "policy": "round_robin",
+      "reuse": 0.6069,
+      "drift": 0.0427,
+      "misprediction_rate": 0.1525,
+      "load_cv": 0.0
+    },
+    {
+      "condition": "realistic drift",
+      "policy": "least_connections",
+      "reuse": 0.6069,
+      "drift": 0.0427,
+      "misprediction_rate": 0.1525,
+      "load_cv": 0.0
+    },
+    {
+      "condition": "realistic drift",
+      "policy": "consistent_hash",
+      "reuse": 0.6584,
+      "drift": 0.1217,
+      "misprediction_rate": 0.405,
+      "load_cv": 0.1581
+    },
+    {
+      "condition": "realistic drift",
+      "policy": "pure_affinity",
+      "reuse": 0.6562,
+      "drift": 0.1154,
+      "misprediction_rate": 0.3825,
+      "load_cv": 0.5788
+    },
+    {
+      "condition": "realistic drift",
+      "policy": "cost_model",
+      "reuse": 0.6287,
+      "drift": 0.077,
+      "misprediction_rate": 0.2362,
+      "load_cv": 0.0628
+    }
+  ]
+}
