@@ -71,3 +71,38 @@ structurally blind — finite capacity and eviction, load skew, replica churn. N
 
 So finite capacity is next, and cache-state drift stops being a nice-to-have. It is where the thesis
 lives or dies.
+
+## 2026-08-26 (later) — finite capacity and drift
+
+Q: does cache-state drift change which routing policy wins?
+
+Built ground-truth replica caches separate from the router's belief, swept capacity from unbounded
+to 8k tokens/replica, and modelled two drift causes. 64 tests pass.
+
+**Zero drift on the first run, and that was the finding.** If the router sees every request and
+knows the true capacity, its eviction model reproduces the replica exactly — same insertion order,
+same LRU, same evictions. Drift is not a property of having a belief, it is a consequence of
+specific failures. Naming them turned out to be most of the work:
+
+  wrong capacity assumption      4.5% drift at 2x, 6.0% at 4x
+  a second router on the fleet   3.5% drift
+  both                           7.7% drift, 23.6% of requests mispredicted
+
+Real capacity is not knowable to a fixed number anyway — it moves with model size,
+gpu_memory_utilization, fragmentation and batch size. So the 2x case is the realistic one, not the
+pathological one.
+
+**Drift hurts sticky policies most, exactly as predicted.** Consistent hashing mispredicts on 40.5%
+of requests vs the cost model's 23.6%: it keeps routing to an assigned replica that evicted the
+prefix, and has no way to find out. That mechanism is real and now measured.
+
+**But it still wins on reuse — 65.8% to 62.9%.** The thesis has not recovered.
+
+The thing I have to be careful not to paper over: the metric is biased against my own policy. The
+cost model optimises queue delay + prefill; I am measuring only prefill. It is deliberately trading
+reuse for balance, and it does buy real balance (CV 0.063 vs 0.158, a 2.5x tighter spread) — but a
+prefill-only metric cannot see that. Latency is where it would show.
+
+So: neither proven nor disproven, and switching metrics now without saying so would be cheating.
+Next build is a service-time model so TTFT and p99 become measurable. That is the experiment that
+settles it.

@@ -67,8 +67,49 @@ complexity where hashing structurally cannot see the problem:
 - **load skew** — heavy and light sessions hash the same, so there is no rebalancing
 - **replica churn** — scaling the fleet reshuffles the ring and invalidates affinity wholesale
 
-None of those are simulated yet. Finite capacity is next, which makes cache-state drift the
-make-or-break question for the thesis rather than an interesting aside.
+## Results with a finite cache
+
+`uv run python experiments/02_capacity_and_drift.py`. Same traffic, 8k tokens per replica
+(about 1 GB of KV for an 8B model), with two drift causes active: the router assuming 2× the real
+capacity, and a second router sharing the fleet whose traffic it never sees.
+
+| policy | reuse | drift | mispredicted requests | load CV |
+|---|---|---|---|---|
+| `round_robin` | 60.7% | 4.3% | 15.2% | 0.000 |
+| `least_connections` | 60.7% | 4.3% | 15.2% | 0.000 |
+| `consistent_hash` | **65.8%** | 12.2% | 40.5% | 0.158 |
+| `pure_affinity` | 65.6% | 11.5% | 38.2% | 0.579 |
+| `cost_model` | 62.9% | **7.7%** | **23.6%** | **0.063** |
+
+**Drift is not automatic — it has causes.** The first run of this measured zero drift under every
+condition, which was the useful result. A router that sees all traffic and knows the true capacity
+reproduces the replica's eviction exactly. Drift comes from specific failures: a wrong capacity
+assumption (4.5% at 2×, 6.0% at 4×), unobserved traffic from another router (3.5%), and 7.7% when
+both are present.
+
+**Drift punishes the sticky policies hardest.** Consistent hashing mispredicts on 40.5% of requests
+against the cost model's 23.6%, because it keeps routing to an assigned replica that has evicted the
+prefix and has no mechanism to find out. That is the failure this project was built to catch, and it
+is real and measurable.
+
+**But the ranking does not change. Consistent hashing still wins on reuse.**
+
+### Why that is not yet a verdict
+
+The metric is structurally biased against the cost model, and it is worth being explicit about it
+rather than quietly switching metrics later.
+
+The cost model optimises `queue_delay + prefill_cost(uncached)`. This measures only the second term.
+A policy that ignores queueing will always look better on a queueing-free metric — the cost model is
+deliberately giving up reuse to buy balance, and the balance it buys is real (CV 0.063 against
+0.158, a 2.5× tighter spread). That advantage can only show up as tail latency, and latency needs a
+service-time model this harness does not have.
+
+So the honest position: the thesis is neither proven nor disproven. Measuring TTFT is the next
+build, and it is the experiment that settles it.
+
+Still unmodelled, and each favours the cost model: load skew across sessions, replica churn from
+scaling the fleet, and heterogeneous replica capacity.
 
 ## Application
 
