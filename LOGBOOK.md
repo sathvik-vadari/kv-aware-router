@@ -106,3 +106,32 @@ prefill-only metric cannot see that. Latency is where it would show.
 So: neither proven nor disproven, and switching metrics now without saying so would be cheating.
 Next build is a service-time model so TTFT and p99 become measurable. That is the experiment that
 settles it.
+
+## 2026-08-28 — latency, and the verdict
+
+Q: does trading cache reuse for load balance pay off in tail latency?
+
+Built the discrete-event simulator: prefill serialised per replica, decode overlapping, decode
+slowing prefill. Swept load 0.5x to 6x. 72 tests pass.
+
+**Yes, and the earlier metric was hiding it.** On prefill work alone the cost model looked mediocre.
+On TTFT p99 at 6x load it is 158ms against consistent hashing's 282ms — 44% better — for four points
+less reuse.
+
+**The headline finding is not the one I expected.** Round-robin has the best tail at every load above
+1x, despite doing the most redundant prefill of any policy. Tail latency is set by the worst-loaded
+replica, not by average work, so balance beats reuse. The metric the field optimises for KV-aware
+routing is hit rate, and hit rate is not what governs the tail.
+
+**Pure affinity is actively harmful**: 382ms p99 at 6x against round-robin's 152ms. It keeps the warm
+replica warm by overloading it.
+
+The cost model is the only policy near-best on both axes — within 4% of round-robin's tail with five
+points more reuse. That is a Pareto argument, not a win, and I should keep saying it that way.
+
+Where I overstated the thesis: I claimed the policy would slide from affinity to balance across the
+load curve. Load CV does fall (0.127 to 0.047), so it rebalances — but reuse barely moves (67.0% to
+66.5%). It redistributes among near-equivalent cache options rather than abandoning the cache. Right
+mechanism, wrong story.
+
+Next: load skew and replica churn, the two conditions where consistent hashing has no answer at all.

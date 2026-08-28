@@ -105,11 +105,55 @@ deliberately giving up reuse to buy balance, and the balance it buys is real (CV
 0.158, a 2.5× tighter spread). That advantage can only show up as tail latency, and latency needs a
 service-time model this harness does not have.
 
-So the honest position: the thesis is neither proven nor disproven. Measuring TTFT is the next
-build, and it is the experiment that settles it.
+So the honest position at that point: neither proven nor disproven. Measuring TTFT settles it.
 
-Still unmodelled, and each favours the cost model: load skew across sessions, replica churn from
-scaling the fleet, and heterogeneous replica capacity.
+## Results with latency
+
+`uv run python experiments/03_latency_under_load.py`. Same fleet, offered load swept on fixed
+traffic. TTFT p99 in milliseconds:
+
+| load | `round_robin` | `least_conn` | `consistent_hash` | `pure_affinity` | `cost_model` |
+|---|---|---|---|---|---|
+| 0.5× | 74 | 74 | 74 | 77 | **74** |
+| 1× | 77 | 77 | 81 | 87 | **77** |
+| 2× | **84** | 95 | 98 | 118 | 91 |
+| 4× | **104** | 148 | 155 | 205 | 127 |
+| 6× | **152** | 256 | 282 | 382 | 158 |
+
+| | reuse | TTFT p99 @ 6× | load CV |
+|---|---|---|---|
+| `round_robin` | 61.5% | **152 ms** | 0.000 |
+| `consistent_hash` | **70.6%** | 282 ms | 0.158 |
+| `pure_affinity` | 70.5% | 382 ms | 0.579 |
+| `cost_model` | 66.5% | 158 ms | 0.047 |
+
+**Chasing the cache is actively harmful at load.** `pure_affinity` is 2.5× worse on tail latency
+than round-robin at 6× load — 382 ms against 152 ms — in exchange for nine points of reuse. It
+keeps the warm replica warm by overloading it, and the queue it builds costs far more than the
+prefill it saves.
+
+**Load balance beats cache reuse for tail latency, at every load above 1×.** Round-robin does the
+most redundant prefill work of any policy and still has the best p99, because the tail is set by the
+worst-loaded replica rather than by average work. That is worth sitting with: the metric the field
+optimises for KV-aware routing — hit rate — is not the metric that governs the tail.
+
+**The cost model is the only policy that is near-best on both axes.** At 6× load it is within 4% of
+round-robin's tail (158 ms vs 152 ms) while getting five points more reuse, and it beats consistent
+hashing's tail by 44% for four points less reuse. Neither extreme is close to both.
+
+### Where the thesis was overstated
+
+The claim was that one policy would slide from affinity behaviour under light load to balance
+behaviour under heavy load. The adaptation is real but smaller and different in kind than claimed:
+load CV falls from 0.127 to 0.047 as load rises, so it does rebalance — but reuse barely moves
+(67.0% → 66.5%). It is redistributing among near-equivalent cache options rather than abandoning the
+cache. The mechanism works; the story about it was too dramatic.
+
+`cost_model` also does not strictly dominate anything. It sits on the Pareto frontier between the
+extremes, which is a weaker and more honest claim than "it wins".
+
+Still unmodelled, and each favours the cost model further: load skew across sessions, replica churn
+from scaling the fleet, and heterogeneous replica capacity.
 
 ## Application
 
