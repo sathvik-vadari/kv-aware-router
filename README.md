@@ -242,9 +242,29 @@ not an implementation detail.
 
 ## Prior art
 
-Cache-aware routing exists — SGLang ships a router, and vLLM's production-stack and AIBrix have
-their own. This is a from-scratch take with an explicit cost model, built to be measured against
-those baselines rather than to replace them.
+This is a well-explored problem and this repo does not claim novelty. It is a from-scratch take
+built to understand the area by rebuilding it, and to be measured against the real work rather than
+to replace it.
+
+- [**Preble**](https://arxiv.org/abs/2407.00023) is the direct precursor: a two-level distributed
+  scheduler targeting, in their words, "the fundamental tension between cache locality and load
+  balancing" — the same tension this repo's cost model addresses, solved more thoroughly. 1.5–14.5×
+  over SGLang.
+- [**DualMap**](https://arxiv.org/pdf/2602.06502) does cache affinity and load balancing together
+  with dual hash rings, SLO-aware routing and hotspot rebalancing.
+- [**TokenLake**](https://arxiv.org/pdf/2508.17219) and
+  [**DeepServe**](https://arxiv.org/pdf/2501.14417) cover segment-level prefix pools and
+  locality-aware serverless scheduling.
+- Production systems: [llm-d](https://llm-d.ai/blog/kvcache-wins-you-can-see), NVIDIA Dynamo,
+  GKE Inference Gateway, SGLang's router, vLLM production-stack, AIBrix.
+
+**On cache-state drift, specifically.** An earlier version of this README called it an open question.
+That was wrong. [llm-d ships precise prefix-cache-aware
+routing](https://github.com/llm-d/llm-d/blob/main/guides/precise-prefix-cache-aware/README.md) in
+which the router subscribes to KV block allocation and eviction events from each engine and keeps a
+real-time map — which is the clean answer. The mitigation this repo would have proposed, discounting
+a replica's score when its cache state is stale, is also already standard practice. What is measured
+here is the *cost* of drift and how it decomposes by cause, not the discovery of it.
 
 ## Running
 

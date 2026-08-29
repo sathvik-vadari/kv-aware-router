@@ -183,3 +183,24 @@ cannot settle the balance-versus-affinity tradeoff.
 
 Also hit a real-world trap: port 8001 already had one of my work services on it, and curl reached
 that instead of the backend. Moved to 9101-9103.
+
+## 2026-08-30 — correcting the prior-art claim
+
+Searched the literature properly instead of assuming. The area is thoroughly explored and I had told
+Sathvik otherwise.
+
+Preble (arXiv:2407.00023) is the direct precursor and states our exact thesis -- "the fundamental
+tension between cache locality and load balancing." DualMap (arXiv:2602.06502) is titled almost
+literally what this project does. TokenLake, DeepServe, llm-d, Dynamo, GKE Inference Gateway all
+cover the ground.
+
+Worse for my claim: cache-state drift is not an open question. llm-d's precise prefix-cache-aware
+routing has the router subscribe to KV block allocation and eviction events from each engine and
+keep a real-time map. Even the mitigation I would have proposed -- discount the score when state is
+stale -- is written down as standard practice.
+
+So the drift work here measures the cost of a known problem and decomposes it by cause. That is
+worth something, but it is not a discovery, and the README now says so.
+
+Project stands as a portfolio piece and a way to have learned this area by rebuilding it. It is not
+Paper 3.
