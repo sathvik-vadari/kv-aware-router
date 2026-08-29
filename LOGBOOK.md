@@ -158,3 +158,28 @@ itself the whole fleet is saturated. Nothing would error -- it would just route 
 
 Still simulated where it counts: no run against real vLLM yet, so every latency number is from a
 service model I wrote.
+
+## 2026-08-29 (later) — real backends
+
+Q: does any of this hold against a real engine rather than my service model?
+
+Three mlx_lm servers on the M4, real prompt cache, real prefill, driven through the actual gateway.
+
+Checked the premise first, since everything depends on it: the backend genuinely reuses prefixes
+across requests. Warm system prompt 285ms TTFT, cold 547ms, repeat 172ms. Real and large.
+
+**cost_model gets pure_affinity's median with a better tail** — p50 within 9ms, p90 better by 210ms,
+p99 better by 441ms — and beats consistent_hash on every percentile. That is the thesis, measured.
+
+**The simulation's headline finding did not survive.** Experiment 03 said balance beats reuse for
+tail latency, with round-robin winning p99. On hardware round-robin has the worst p90. The simulated
+conclusion turned out to be sensitive to service-model parameters I guessed -- mainly the ratio of
+prefill cost to decode cost. That is the strongest argument yet for spending the GPU budget.
+
+The caveat I have to keep loud: the three replicas share one GPU. Spreading load across them adds no
+parallelism, it interleaves work on the same silicon. That biases against balance and towards
+affinity, because the thing balance buys does not exist here. So this settles the reuse axis and
+cannot settle the balance-versus-affinity tradeoff.
+
+Also hit a real-world trap: port 8001 already had one of my work services on it, and curl reached
+that instead of the backend. Moved to 9101-9103.

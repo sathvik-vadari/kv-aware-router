@@ -155,6 +155,47 @@ extremes, which is a weaker and more honest claim than "it wins".
 Still unmodelled, and each favours the cost model further: load skew across sessions, replica churn
 from scaling the fleet, and heterogeneous replica capacity.
 
+## Results on real backends
+
+`uv run python experiments/04_real_backend.py`. Three `mlx_lm` servers running
+Qwen2.5-0.5B-Instruct-4bit with a bounded prompt cache, 24 sessions × 4 turns, concurrency 6,
+96 requests per policy. Wall-clock TTFT through the actual gateway.
+
+| policy | TTFT p50 | TTFT p90 | TTFT p99 | reuse |
+|---|---|---|---|---|
+| `round_robin` | 2023 ms | 2726 ms | 3771 ms | 78.5% |
+| `least_connections` | 1835 ms | 2447 ms | **2755 ms** | 78.4% |
+| `consistent_hash` | 2016 ms | 2813 ms | 3310 ms | 83.0% |
+| `pure_affinity` | **1641 ms** | 2520 ms | 3370 ms | **88.1%** |
+| `cost_model` | 1650 ms | **2310 ms** | 2929 ms | 84.6% |
+
+The backend's prefix cache is real and large: a warm system prompt gives 285 ms TTFT against
+547 ms cold, and 172 ms on a repeat.
+
+**The cost model gets affinity's median with a better tail.** It is within 9 ms of `pure_affinity`
+on p50 while beating it by 210 ms on p90 and 441 ms on p99, and it beats `consistent_hash` on every
+percentile. That is the intended behaviour, measured rather than modelled.
+
+**The simulation's headline finding did not survive contact with hardware.** Experiment 03 concluded
+that balance beats reuse for tail latency and that round-robin has the best p99. Here round-robin
+has the *worst* p90 and among the worst p99. The simulated conclusion was sensitive to service-model
+parameters — particularly the ratio of prefill cost to decode cost — that were guessed rather than
+measured. Worth stating plainly, because it is the reason the rented-GPU run matters.
+
+### The caveat that limits this
+
+**The three replicas share one GPU.** They are three processes on a single M4, so spreading load
+across them adds no real parallelism — it just interleaves work on the same silicon. That biases
+against the balance-oriented policies and in favour of affinity, because on this setup the main
+thing balance buys (independent compute) does not exist.
+
+So this run establishes that the prefix cache is real, that the gateway exploits it, and that the
+cost model behaves as designed on the reuse axis. It cannot settle the balance-versus-affinity
+tradeoff. That needs replicas on independent GPUs, which is what the rented session is for.
+
+Also: 96 requests per policy is a small sample, so p99 is close to the maximum and should be read
+as indicative. Absolute numbers come from a 0.5B model on a laptop and do not transfer.
+
 ## Application
 
 A gateway you put in front of any set of OpenAI-compatible endpoints.
