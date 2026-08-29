@@ -135,3 +135,26 @@ load curve. Load CV does fall (0.127 to 0.047), so it rebalances — but reuse b
 mechanism, wrong story.
 
 Next: load skew and replica churn, the two conditions where consistent hashing has no answer at all.
+
+## 2026-08-29 — the gateway
+
+Q: does this run against real endpoints, or is it only a simulator?
+
+Built the OpenAI-compatible gateway and a pluggable tokenizer. 84 tests, all against
+httpx.MockTransport backends so there are no ports and no network.
+
+Two bugs worth keeping:
+
+FastAPI lifespan does not run unless TestClient is used as a context manager, so an injected client
+was invisible to the handler. Fixed on the design side rather than the test side -- an injected
+client should not depend on lifespan at all -- which is the better shape anyway.
+
+httpx.MockTransport builds an already-read response body, so client.stream() refuses it with
+StreamConsumed. The mock has to return an unread async stream.
+
+The thing I was most careful about: completing the dispatch on every exit path, including the client
+hanging up mid-stream. Miss that and in_flight only ever goes up, and the router gradually convinces
+itself the whole fleet is saturated. Nothing would error -- it would just route worse and worse.
+
+Still simulated where it counts: no run against real vLLM yet, so every latency number is from a
+service model I wrote.

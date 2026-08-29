@@ -161,12 +161,13 @@ A gateway you put in front of any set of OpenAI-compatible endpoints.
 
 ## Status
 
-The routing core is built and tested. Nothing has been measured yet — no gateway, no traffic.
+Working gateway, and three experiments with results. Not yet run against a real inference backend —
+every latency number below comes from a service model, not hardware.
 
 - [x] Radix tree over tokens with per-replica residency, block-aligned matching, LRU eviction
 - [x] Cost-model router and the baselines to beat (round-robin, least-connections, consistent hash, pure affinity)
-- [ ] Gateway speaking the OpenAI chat completions API
-- [ ] Cache-state drift: what happens when a replica evicts something the router still believes it has
+- [x] Gateway speaking the OpenAI chat completions API
+- [x] Cache-state drift: what happens when a replica evicts something the router still believes it has
 - [ ] Evaluation under production arrival traces, not synthetic uniform load
 
 New to prefill, decode, and KV cache mechanics? [CONCEPTS.md](CONCEPTS.md) explains what the
@@ -209,4 +210,36 @@ those baselines rather than to replace them.
 ```bash
 uv sync
 uv run pytest
+```
+
+### The gateway
+
+```bash
+KV_ROUTER_BACKENDS="a=http://localhost:8001,b=http://localhost:8002" \
+KV_ROUTER_POLICY=cost_model \
+KV_ROUTER_TOKENIZER=meta-llama/Llama-3.1-8B-Instruct \
+uv run uvicorn kv_aware_router.gateway:app --port 8080
+```
+
+Then point any OpenAI client at `http://localhost:8080`. Responses carry
+`x-kv-router-replica` and `x-kv-router-cached-tokens`, and `GET /stats` shows live fleet state.
+
+| variable | default | |
+|---|---|---|
+| `KV_ROUTER_BACKENDS` | — | `name=url` pairs, comma separated. Required. |
+| `KV_ROUTER_POLICY` | `cost_model` | any of the five |
+| `KV_ROUTER_TOKENIZER` | `byte` | a HuggingFace model id, or `byte` for an offline stand-in |
+| `KV_ROUTER_MATCH_UNIT` | `16` | must be a multiple of 16 |
+| `KV_ROUTER_CAPACITY_TOKENS` | unset | per-replica KV budget, for the router's eviction model |
+
+**Set the tokenizer to the model you are actually serving.** The default `byte` tokenizer keeps the
+gateway runnable with no downloads, but it is not any real model's tokenizer, so match lengths — and
+therefore reported hit rates — will not correspond to what the backend does.
+
+### The experiments
+
+```bash
+uv run python experiments/01_policy_comparison.py
+uv run python experiments/02_capacity_and_drift.py
+uv run python experiments/03_latency_under_load.py
 ```
