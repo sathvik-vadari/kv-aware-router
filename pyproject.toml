@@ -20,6 +20,9 @@ build-backend = "hatchling.build"
 packages = ["src/kv_aware_router"]
 
 [dependency-groups]
+bench = [
+    "mlx-lm>=0.31.3",
+]
 dev = [
     "pytest>=9.1.1",
 ]

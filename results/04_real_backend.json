@@ -1,0 +1,87 @@
+{
+  "model": "mlx-community/Qwen2.5-0.5B-Instruct-4bit",
+  "backends": {
+    "a": "http://127.0.0.1:9101",
+    "b": "http://127.0.0.1:9102",
+    "c": "http://127.0.0.1:9103"
+  },
+  "config": {
+    "sessions": 24,
+    "turns": 4,
+    "concurrency": 6,
+    "max_tokens": 48,
+    "tokenizer": "mlx-community/Qwen2.5-0.5B-Instruct-4bit"
+  },
+  "results": [
+    {
+      "policy": "round_robin",
+      "requests": 96,
+      "ttft_p50_ms": 2023.1,
+      "ttft_p90_ms": 2725.9,
+      "ttft_p99_ms": 3771.2,
+      "ttft_mean_ms": 2045.5,
+      "router_reuse_fraction": 0.785,
+      "requests_per_replica": {
+        "a": 32,
+        "b": 32,
+        "c": 32
+      }
+    },
+    {
+      "policy": "least_connections",
+      "requests": 96,
+      "ttft_p50_ms": 1835.2,
+      "ttft_p90_ms": 2446.9,
+      "ttft_p99_ms": 2754.6,
+      "ttft_mean_ms": 1845.8,
+      "router_reuse_fraction": 0.7836,
+      "requests_per_replica": {
+        "a": 31,
+        "b": 33,
+        "c": 32
+      }
+    },
+    {
+      "policy": "consistent_hash",
+      "requests": 96,
+      "ttft_p50_ms": 2016.1,
+      "ttft_p90_ms": 2812.6,
+      "ttft_p99_ms": 3310.2,
+      "ttft_mean_ms": 1992.3,
+      "router_reuse_fraction": 0.8297,
+      "requests_per_replica": {
+        "a": 32,
+        "b": 28,
+        "c": 36
+      }
+    },
+    {
+      "policy": "pure_affinity",
+      "requests": 96,
+      "ttft_p50_ms": 1641.3,
+      "ttft_p90_ms": 2520.5,
+      "ttft_p99_ms": 3370.0,
+      "ttft_mean_ms": 1732.7,
+      "router_reuse_fraction": 0.8809,
+      "requests_per_replica": {
+        "a": 32,
+        "b": 32,
+        "c": 32
+      }
+    },
+    {
+      "policy": "cost_model",
+      "requests": 96,
+      "ttft_p50_ms": 1650.1,
+      "ttft_p90_ms": 2310.1,
+      "ttft_p99_ms": 2929.2,
+      "ttft_mean_ms": 1699.0,
+      "router_reuse_fraction": 0.846,
+      "requests_per_replica": {
+        "a": 32,
+        "b": 32,
+        "c": 32
+      }
+    }
+  ]
+}
