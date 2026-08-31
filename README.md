@@ -69,7 +69,18 @@ including the ones here.
 ```bash
 uv sync
 uv run pytest                                          # 94 tests
-uv run python experiments/01_policy_comparison.py      # and 02..05
+uv run python experiments/01_policy_comparison.py      # 01, 02, 03 and 05 are self-contained
+```
+
+Experiment 04 is the only one needing real backends. Three `mlx_lm` servers, which run on a laptop:
+
+```bash
+uv sync --group bench
+for p in 9101 9102 9103; do
+  uv run python -m mlx_lm server --model mlx-community/Qwen2.5-0.5B-Instruct-4bit \
+    --port $p --host 127.0.0.1 --prompt-cache-size 4 --log-level WARNING &
+done
+uv run python experiments/04_real_backend.py
 ```
 
 ### The gateway
