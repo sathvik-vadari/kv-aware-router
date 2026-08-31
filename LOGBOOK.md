@@ -204,3 +204,30 @@ worth something, but it is not a discovery, and the README now says so.
 
 Project stands as a portfolio piece and a way to have learned this area by rebuilding it. It is not
 Paper 3.
+
+## 2026-08-31 — skew and churn
+
+Q: does the ranking change in the two conditions a stateless session hash cannot answer?
+
+**Yes, and the thesis finally wins outright.** At turn_skew 1.5 -- top 10% of sessions carrying half
+the requests, which is what chat traffic actually looks like -- cost_model takes both best reuse
+(69.9% vs consistent_hash 68.2%) and best tail (853ms vs 895ms). Every earlier loss was on uniform
+sessions, which is precisely where assigning by identity is already optimal. I had built consistent
+hashing's best case and then been surprised it won.
+
+**pure_affinity gives a newly added replica literally zero requests.** Scale up under load and the
+new GPUs sit idle forever, because it only ever picks the longest cached prefix and a cold replica
+has none. Clearest argument in the whole repo against naive cache-chasing.
+
+**But the cost model has the same disease, just at a higher threshold.** Swept load on a lighter
+workload: 0.0% of traffic to a new replica up to 10x, 4.5% at 16x, 17.0% at 24x. Greedy per-request
+minimisation never pays the one-off cost of warming a cold replica -- each request really is faster
+on a warm one. Correct per request, wrong operationally.
+
+That is exactly why Preble's scheduler is exploitation *and exploration*. Rebuilding the naive
+version is how the design choice became obvious, which is the best argument for having built this.
+
+Measurement bug caught: the post-scale-up window was compared in unscaled time against outcomes
+carrying scaled arrival times, so the slice was empty and every policy reported 0.0%. Would have
+been easy to write up as a finding. Always sanity-check a metric against a policy whose behaviour
+you already know -- round_robin reporting 0% share was the tell.

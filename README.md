@@ -155,6 +155,65 @@ extremes, which is a weaker and more honest claim than "it wins".
 Still unmodelled, and each favours the cost model further: load skew across sessions, replica churn
 from scaling the fleet, and heterogeneous replica capacity.
 
+## Results under skew and churn
+
+`uv run python experiments/05_skew_and_churn.py`. Everything above used uniform sessions on a fixed
+fleet, which is consistent hashing's best case. Production is neither.
+
+**Skewed session weight** — turns per session drawn from a lognormal with the mean held fixed, so a
+few conversations run for dozens of turns. Load 3×, 8k tokens/replica:
+
+| policy | reuse @ 0 | reuse @ 1.5 | p99 @ 0 | p99 @ 1.5 |
+|---|---|---|---|---|
+| `round_robin` | 60.9% | 53.3% | **101 ms** | 811 ms |
+| `consistent_hash` | 69.2% | 68.2% | 172 ms | 895 ms |
+| `pure_affinity` | 69.2% | 67.7% | 239 ms | 895 ms |
+| `cost_model` | 65.0% | **69.9%** | 112 ms | **853 ms** |
+
+At skew 1.5 — the top 10% of sessions carrying half the requests — **the cost model wins both axes
+for the first time**, taking best reuse *and* best tail. That is the regime it was designed for, and
+it explains the earlier losses: uniform sessions are precisely the case where assigning by identity
+is already optimal.
+
+(Comparisons are valid within a skew level, where all policies see identical traffic. Across skew
+levels the request counts differ, so the trend down a column is not load-matched.)
+
+**Replica churn** — share of post-scale-up requests reaching two newly added replicas, fair share
+16.7%:
+
+| policy | share of new capacity |
+|---|---|
+| `round_robin` | 16.8% |
+| `consistent_hash` | 15.7% |
+| `least_connections` | 10.5% |
+| `cost_model` | 16.8% |
+| `pure_affinity` | **0.0%** |
+
+**`pure_affinity` gives a newly added replica literally nothing.** It only ever picks the longest
+cached prefix and a cold replica has none, so you scale up under load and the new GPUs sit idle
+forever. That is a serious operational failure and the clearest argument in this repo against naive
+cache-chasing.
+
+### A limitation of the cost model, found the same way
+
+The cost model takes its fair share above — but only because that run was loaded enough. Sweeping
+load on a lighter workload:
+
+| load | share of new replica |
+|---|---|
+| 1×–10× | 0.0% |
+| 16× | 4.5% |
+| 24× | 17.0% |
+
+**Below roughly 16× it starves new capacity too.** Greedy per-request cost minimisation never pays
+the one-off price of warming a cold replica, because each individual request genuinely is faster on
+a warm one. Correct per request, wrong operationally: you scaled up for a reason and the router will
+not use it until things are already bad.
+
+This is exactly why [Preble](https://arxiv.org/abs/2407.00023)'s scheduler is built around
+exploitation *and exploration* rather than pure exploitation. Rebuilding the naive version is how
+that design choice became obvious.
+
 ## Results on real backends
 
 `uv run python experiments/04_real_backend.py`. Three `mlx_lm` servers running
