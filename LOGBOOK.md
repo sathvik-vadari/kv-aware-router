@@ -231,3 +231,18 @@ Measurement bug caught: the post-scale-up window was compared in unscaled time a
 carrying scaled arrival times, so the slice was empty and every policy reported 0.0%. Would have
 been easy to write up as a finding. Always sanity-check a metric against a policy whose behaviour
 you already know -- round_robin reporting 0% share was the tell.
+
+## 2026-08-31 (later) — packaging, and deleting Paper 2
+
+Restructured the README. It had accreted five "Results" sections in discovery order, so a reader hit
+the run where the cost model placed fourth before anything else, and the result that vindicates it
+was 158 lines down. Findings now lead; RESULTS.md keeps the full derivation including the losses.
+
+Deleted ~/Documents/Paper2 (4.0 GB). Code is cheap to regenerate and the traces re-download, but the
+*derived* numbers were expensive -- re-deriving needs the 3.6 GB back plus a full pipeline run -- so
+those went into memory as prose first: per-GPU energy savings under a static T* policy (H100 5.6% /
+12.6% fast, A100 3.3% / 8.3%, L40S 10.8% / 23.7%), time-of-day policies coming out *worse* than
+static by 1.3-2.6 pp, and the per-service gap statistics.
+
+Rule worth keeping: before deleting a dead project, check whether what is expensive is the code or
+the numbers. Usually it is the numbers, and they fit in a paragraph.
