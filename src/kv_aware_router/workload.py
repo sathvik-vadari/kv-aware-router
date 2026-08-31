@@ -49,6 +49,16 @@ class WorkloadSpec:
     reply_tokens: int = 160
     session_arrival_rate: float = 2.0    # new conversations per second
     think_time_s: float = 20.0           # mean gap between turns
+    # Lognormal spread of turns per session, holding the mean at
+    # turns_per_session. 0 gives every session the same length, which is the
+    # condition a stateless session hash is built for. Real chat traffic is
+    # nothing like it: most conversations end after a turn or two and a few run
+    # for dozens, so a hash that assigns by identity cannot avoid landing
+    # several heavy sessions on one replica.
+    turn_skew: float = 0.0
+    # Zipf exponent over system prompt popularity. 0 is uniform; higher means
+    # one prompt dominates, which concentrates cross-session sharing.
+    system_prompt_skew: float = 0.0
     seed: int = 0
 
 
@@ -64,15 +74,33 @@ def generate(spec: WorkloadSpec = WorkloadSpec()) -> list[Request]:
     ]
     next_token_id = spec.n_system_prompts * spec.system_tokens
 
+    if spec.system_prompt_skew > 0:
+        weights = np.array(
+            [1.0 / (i + 1) ** spec.system_prompt_skew for i in range(spec.n_system_prompts)]
+        )
+        weights /= weights.sum()
+    else:
+        weights = None
+
+    def draw_turns() -> int:
+        if spec.turn_skew <= 0:
+            return spec.turns_per_session
+        # lognormal with mu chosen so the mean stays at turns_per_session
+        sigma = spec.turn_skew
+        mu = np.log(spec.turns_per_session) - sigma**2 / 2
+        return max(1, int(round(float(rng.lognormal(mu, sigma)))))
+
     requests: list[Request] = []
     session_start = 0.0
     for session_id in range(spec.n_sessions):
         session_start += rng.exponential(1.0 / spec.session_arrival_rate)
-        prompt = system_prompts[rng.integers(spec.n_system_prompts)]
+        index = int(rng.choice(spec.n_system_prompts, p=weights)) if weights is not None \
+            else int(rng.integers(spec.n_system_prompts))
+        prompt = system_prompts[index]
 
         history: list[int] = list(prompt)
         at = session_start
-        for turn in range(spec.turns_per_session):
+        for turn in range(draw_turns()):
             user = tuple(range(next_token_id, next_token_id + spec.user_tokens))
             next_token_id += spec.user_tokens
             history.extend(user)

@@ -113,8 +113,27 @@ class SimResult:
         return var**0.5 / mean
 
 
+@dataclass(frozen=True, slots=True)
+class ChurnEvent:
+    """A replica joining or leaving mid-run, i.e. autoscaling.
+
+    Removal drains: the replica stops receiving new requests and loses its
+    cache, but work already queued on it finishes. That is what a graceful
+    scale-down does.
+
+    Churn is the condition a stateless session hash cannot answer. Changing the
+    replica set reshuffles part of its keyspace, so sessions are reassigned to
+    replicas that have never seen them -- and it has no way to know that, since
+    it never looks at cache state.
+    """
+
+    at_s: float
+    action: str          # "add" | "remove"
+    replica_id: str
+
+
 # event kinds, ordered so ties resolve deterministically
-_ARRIVAL, _PREFILL_DONE, _DECODE_DONE = 0, 1, 2
+_CHURN, _ARRIVAL, _PREFILL_DONE, _DECODE_DONE = 0, 1, 2, 3
 
 
 def simulate(
@@ -128,6 +147,7 @@ def simulate(
     belief: BeliefMode = "modelled",
     belief_capacity_ratio: float = 1.0,
     load_scale: float = 1.0,
+    churn: list[ChurnEvent] | None = None,
 ) -> SimResult:
     """Run the workload through the fleet in simulated time.
 
@@ -165,6 +185,9 @@ def simulate(
     for req in requests:
         heapq.heappush(events, (req.arrival_s / load_scale, seq, _ARRIVAL, req))
         seq += 1
+    for event in churn or []:
+        heapq.heappush(events, (event.at_s / load_scale, seq, _CHURN, event))
+        seq += 1
 
     def start_next(replica: str, now: float) -> None:
         nonlocal seq
@@ -186,6 +209,25 @@ def simulate(
 
     while events:
         now, _, kind, payload = heapq.heappop(events)
+
+        if kind == _CHURN:
+            event: ChurnEvent = payload  # type: ignore[assignment]
+            rid = event.replica_id
+            if event.action == "add":
+                fleet.add_replica(rid)
+                busy.setdefault(rid, False)
+                pending.setdefault(rid, deque())
+                decoding.setdefault(rid, 0)
+                result.requests_per_replica.setdefault(rid, 0)
+                if capacity_tokens:
+                    truth.capacity_tokens[rid] = capacity_tokens
+                    if belief_capacity is not None:
+                        fleet.tree.capacity_tokens[rid] = belief_capacity[rid] if rid in belief_capacity else int(capacity_tokens * belief_capacity_ratio)
+            else:
+                # stop routing here and drop the cache, but let queued work finish
+                fleet.remove_replica(rid)
+                truth.remove_replica(rid)
+            continue
 
         if kind == _ARRIVAL:
             req: Request = payload  # type: ignore[assignment]

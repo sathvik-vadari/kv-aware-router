@@ -127,8 +127,15 @@ class Fleet:
         return Dispatch(replica_id=replica_id, tokens=tokens, uncached_tokens=uncached)
 
     def complete(self, dispatch: "Dispatch", now: float) -> None:
-        """Record that a dispatched request finished."""
-        state = self.replicas[dispatch.replica_id]
+        """Record that a dispatched request finished.
+
+        Tolerates the replica having been removed while the request was in
+        flight, which is what draining a replica during a scale-down looks
+        like.
+        """
+        state = self.replicas.get(dispatch.replica_id)
+        if state is None:
+            return
         state.in_flight = max(0, state.in_flight - 1)
         state.pending_prefill_tokens = max(
             0, state.pending_prefill_tokens - dispatch.uncached_tokens
